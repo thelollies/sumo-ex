@@ -45,6 +45,10 @@ group :development, :test do
   # Adds support for Capybara system testing and selenium driver
   gem 'capybara', '~> 2.13'
   gem 'selenium-webdriver'
+
+  # Store http request result after first call and stub it thereafter
+  gem 'vcr', '~> 3.0', '>= 3.0.3'
+  gem "fakeweb", "~> 1.3"
 end
 
 group :development do
