@@ -8,7 +8,7 @@ class CreateWebsites < ActiveRecord::Migration[5.1]
       t.timestamps
     end
 
-    add_index :domain_countries, :domain, unique: true
+    add_index :websites, :domain, unique: true
 
   end
 end
