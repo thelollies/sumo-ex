@@ -137,7 +137,14 @@ class PublisherCrawler
 
     # Categorise the links
     results[ 'links' ].each do | uri_string |
-      uri = URI.parse( uri_string )
+
+      begin
+        uri = URI.parse( uri_string )
+      rescue URI::InvalidURIError
+        # If it's not a valid URI (such as javascript in the link section)
+        # ignore it.
+        next
+      end
 
       # If the host of the link is nil (local link) or for a host with the
       # same host (ignoring subdomains) it is an internal link.
