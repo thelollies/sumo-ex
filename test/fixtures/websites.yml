@@ -1,0 +1,11 @@
+# Read about fixtures at http://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  domain: MyString
+  num_external_links: 
+  num_internal_links: 
+
+two:
+  domain: MyString
+  num_external_links: 
+  num_internal_links: 

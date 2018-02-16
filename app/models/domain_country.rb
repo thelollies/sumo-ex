@@ -1,0 +1,2 @@
+class DomainCountry < ApplicationRecord
+end

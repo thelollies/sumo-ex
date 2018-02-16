@@ -1,0 +1,13 @@
+# Read about fixtures at http://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  id: 
+  domain: MyString
+  country: MyString
+  percentage: 1.5
+
+two:
+  id: 
+  domain: MyString
+  country: MyString
+  percentage: 1.5
