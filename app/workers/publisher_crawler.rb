@@ -1,13 +1,10 @@
 require 'wombat'
-require 'pp'
 require 'uri'
 
 class PublisherCrawler
   include Sidekiq::Worker
 
   def perform( domain )
-
-    puts "Crawling #{ domain }"
 
     # TODO check for crawler already running for this domain
 
@@ -19,20 +16,17 @@ class PublisherCrawler
     DomainCountry.transaction do
 
       # Delete old records
-      deleted_count = DomainCountry.where( "domain = ?", domain ).delete_all
-      puts "Deleted #{ deleted_count } existing Alexa records for #{ domain }"
+      DomainCountry.where( "domain = ?", domain ).delete_all
 
       # Create new records
       alexa_results[ 'countries' ].each do | result |
         DomainCountry.create!(
           domain:     domain,
-          country:    result[ 'country' ],
+          country:    result[ 'country' ].gsub(/\A\p{Space}*/, ''), # Remove leading space
           percentage: result[ 'percentage' ]
       )
       end
     end
-
-    pp alexa_results
 
     # Now look up the domain itself
     domain_results = PublisherCrawler.domain_links_summary( domain )
@@ -43,8 +37,7 @@ class PublisherCrawler
     Website.transaction do
 
       # Delete old record
-      deleted_count = Website.where( "domain = ?", domain ).delete_all
-      puts "Deleted #{ deleted_count } existing link count records for #{ domain }"
+      Website.where( "domain = ?", domain ).delete_all
 
       # Create new record
       Website.create!(
@@ -54,10 +47,6 @@ class PublisherCrawler
       )
 
     end
-
-    pp domain_results
-
-    puts "Crawling #{ domain } finished"
 
   end
 
