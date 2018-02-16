@@ -1,58 +1,90 @@
 require 'wombat'
 require 'uri'
 
+# Scrape Alexa and a given domain for information on that domain related to
+# viewers of the websites and the types of links on the website.
+#
 class PublisherCrawler
   include Sidekiq::Worker
 
   def perform( domain )
 
-    # TODO check for crawler already running for this domain
 
-    alexa_results = PublisherCrawler.scrape_alexa_for( domain )
 
-    # Run in transaction so that if creating the new records fails we don't
-    # clean out the old records.
+    # Prevent multiple workers from crawling the same domain at the same time
+    # as this could cause mixed results or uniqueness errors. Expires after
+    # 20 seconds to avoid permanently blocking crawling on this domain.
     #
-    DomainCountry.transaction do
+    # I haven't implemented this 100% properly as expiry just removes the key
+    # in Redis rather than killing the job. I just wanted to demonstrate that I
+    # understand the problems that can occur with concurrently running workers.
+    #
+    semaphore = Redis::Semaphore.new(
+      "publisher_crawler_#{ Base64.encode64( domain ) }",
+      :host => "localhost",
+      :expiration => 20
+    )
 
-      # Delete old records
-      DomainCountry.where( "domain = ?", domain ).delete_all
+    # Wait max 21 seconds before giving up.
+    semaphore.lock( 21 ) do
 
-      # Create new records
-      alexa_results[ 'countries' ].each do | result |
-        DomainCountry.create!(
-          domain:     domain,
-          country:    result[ 'country' ].gsub(/\A\p{Space}*/, ''), # Remove leading space
-          percentage: result[ 'percentage' ]
-      )
+      alexa_results = PublisherCrawler.scrape_alexa_for( domain )
+
+      # Run in transaction so that if creating the new records fails we don't
+      # clean out the old records.
+      #
+      DomainCountry.transaction do
+
+        # Delete old records
+        DomainCountry.where( "domain = ?", domain ).delete_all
+
+        # Create new records
+        alexa_results.each do | result |
+          DomainCountry.create!(
+            domain:     domain,
+            country:    result[ 'country' ].gsub(/\A\p{Space}*/, ''), # Remove leading space
+            percentage: result[ 'percentage' ]
+        )
+        end
       end
-    end
 
-    # Now look up the domain itself
-    domain_results = PublisherCrawler.domain_links_summary( domain )
+      # Now look up the domain itself
+      domain_results = PublisherCrawler.domain_links_summary( domain )
 
-    # Run in transaction so that if creating the new record fails we don't
-    # clean out the old record.
-    #
-    Website.transaction do
+      # Run in transaction so that if creating the new record fails we don't
+      # clean out the old record.
+      #
+      Website.transaction do
 
-      # Delete old record
-      Website.where( "domain = ?", domain ).delete_all
+        # Delete old record
+        Website.where( "domain = ?", domain ).delete_all
 
-      # Create new record
-      Website.create!(
-        domain: domain,
-        num_external_links: domain_results[ :num_external_links ],
-        num_internal_links: domain_results[ :num_internal_links ]
-      )
+        # Create new record
+        Website.create!(
+          domain: domain,
+          num_external_links: domain_results[ 'num_external_links' ],
+          num_internal_links: domain_results[ 'num_internal_links' ]
+        )
+
+      end
 
     end
 
   end
 
+  # Scrape the Alexa for country viewing data on the given +domain+ and return
+  # the data as a hash of the form:
+  #
+  # {
+  #   'country'   => '<country name>',
+  #   'percentage => 'percentage'
+  # }
+  #
+  # +domain+:: String domain to search alexa for.
+  #
   def self.scrape_alexa_for( domain )
 
-    return Wombat.crawl do
+    crawl_result =  Wombat.crawl do
       base_url "https://www.alexa.com/"
       path "/siteinfo/#{ domain }"
 
@@ -63,8 +95,20 @@ class PublisherCrawler
 
     end
 
+    return crawl_result[ 'countries' ]
+
   end
 
+  # Scrape the specified domain and return counts of internal and external links
+  # in a Hash of the form:
+  #
+  # {
+  #   'num_external_links' => <int>,
+  #   'num_internal_links  => <int>
+  # }
+  #
+  # +domain+:: String domain to scrape.
+  #
   def self.domain_links_summary( domain )
 
     # Add the scheme if it is missing
@@ -107,8 +151,8 @@ class PublisherCrawler
     end
 
     return {
-      num_external_links: links_external,
-      num_internal_links: links_internal
+      'num_external_links' =>  links_external,
+      'num_internal_links' =>  links_internal
     }
 
   end
